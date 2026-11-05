@@ -24,7 +24,7 @@ const uint8_t PROGMEM gamma8[] = {
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
 // Set to the number of pixels in the data path under test (see guide, Test 6).
-#define NUM_LEDS 666
+#define NUM_LEDS 138  // ANDRUM4, largest single frame
 #define DATA_PIN 16  // SP803E data pin (guide section 2)
 
 // Frame cap, matches andetag-nafas production firmware

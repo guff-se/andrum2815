@@ -1,33 +1,44 @@
-# ANDETAG NAFAS: Electronics Reference
+# ANDRUM BERLIN: Electronics Reference
 
-## Nafas Installation / Tanweer Festival + Shurooq HQ (permanent)
+## Andrum installation, Berlin
+
+Hardware (WS2815 pixels, SP803E controller, 22AWG 3-conductor cabling) is the same as the Andetag Nafas installation. Sections 2, 3, 4, 8 and the Nafas reference results in section 6 are carried over from that project. Anything Berlin-specific that is not yet decided is marked **TBD**.
 
 ---
 
 ## 1. System Overview
 
-8 frames, 5 models, 666 WS2815 pixels total. Single ESP32 controller drives the entire chain. 12V DC power fed from both ends of a 20m loop. Frames are connected in parallel to the 12V bus (each frame taps power directly; current does not flow serially through pixels). Data is daisy-chained through all frames in series.
+44 frames, 14 models, **2,592 WS2815 pixels** total. 12V DC.
 
-### Frame Order (fixed, cannot be rearranged)
+### Frame Inventory
 
-| Position | Frame    | Pixels | Pixel index range |
-|----------|----------|--------|-------------------|
-| 1        | ANDRUM9  | 48     | 0-47              |
-| 2        | ANDRUM8  | 105    | 48-152            |
-| 3        | ANDRUM11 | 90     | 153-242           |
-| 4        | ANDRUM4  | 144    | 243-386           |
-| 5        | ANDRUM2  | 36     | 387-422           |
-| 6        | ANDRUM11 | 90     | 423-512           |
-| 7        | ANDRUM8  | 105    | 513-617           |
-| 8        | ANDRUM9  | 48     | 618-665           |
+Pixel data source: "Andrum" tab of the frame spreadsheet (`NUM_LEDS`, `NUM_MLEDS`, `NUM_STRIPS` rows), read 2026-11-05.
 
-### Cable Layout
+| Model | Qty | NUM_LEDS (per frame) | NUM_MLEDS | NUM_STRIPS | Pixels (qty x NUM_LEDS) |
+|-------|-----|----------------------|-----------|------------|-------------------------|
+| ANDRUM1  | 1 | 89  | 45  | 8  | 89  |
+| ANDRUM2  | 1 | 36  | 18  | 4  | 36  |
+| ANDRUM3  | 1 | 81  | 41  | 7  | 81  |
+| ANDRUM4  | 1 | 138 | 69  | 12 | 138 |
+| ANDRUM5  | 4 | 27  | 27  | 4  | 108 |
+| ANDRUM6  | 4 | 75  | 75  | 12 | 300 |
+| ANDRUM7  | 4 | 33  | 33  | 5  | 132 |
+| ANDRUM8  | 4 | 109 | 109 | 17 | 436 |
+| ANDRUM9  | 4 | 54  | 54  | 8  | 216 |
+| ANDRUM10 | 4 | 45  | 45  | 7  | 180 |
+| ANDRUM11 | 4 | 99  | 99  | 15 | 396 |
+| ANDRUM12 | 4 | 36  | 36  | 6  | 144 |
+| ANDRUM13 | 4 | 60  | 60  | 9  | 240 |
+| ANDRUM14 | 4 | 24  | 24  | 3  | 96  |
+| **Total** | **44** | | | | **2,592** |
 
-```
-PSU ──3m── F1 ──2m── F2 ──2m── F3 ──2m── F4 ──2m── F5 ──2m── F6 ──2m── F7 ──2m── F8 ──3m── PSU
-```
+Subtotals: ANDRUM1-4 (one each) = 344 px. One set of ANDRUM5-14 = 562 px; four sets = 2,248 px.
 
-Total loop: 20m. Cable: 22AWG / 0.3mm², 3-conductor (12V, GND, DATA).
+**Pixel counts differ from the Nafas builds** of the same model numbers. Nafas firmware (`config.h`) uses ANDRUM8 = 105, ANDRUM9 = 48, ANDRUM11 = 90; the spreadsheet gives 109, 54, 99. ANDRUM2 (36) and ANDRUM4 (138) match. Confirm against the physical Berlin frames before writing mapping code.
+
+### Frame Order and Cable Layout
+
+**TBD.** Physical order, data-chain grouping, cable lengths and power injection points are not yet defined. Nafas used a single 20m loop with 8 frames on one data line; that topology does not scale to 2,592 pixels (see section 5).
 
 ---
 
@@ -59,7 +70,7 @@ Driver: WCH CH340 DriverKit extension (cn.wch.CH34xVCPDriver). Install from WCH 
 
 ```cpp
 #define DATA_PIN 16
-#define NUM_LEDS 666
+#define NUM_LEDS 2592  // total; split across data outputs once topology is decided (section 5)
 
 CRGB leds[NUM_LEDS];
 
@@ -76,7 +87,7 @@ void setup() {
 
 12V PSU feeds two paths:
 1. Barrel jack on SP803E (milliamps, powers ESP32 only)
-2. Directly to the pixel loop VCC/GND at both ends
+2. Directly to the pixel bus VCC/GND (injection points TBD; Nafas fed both ends of one loop)
 
 ### Data Between Frames
 
@@ -108,46 +119,52 @@ ESP32 GPIO outputs 3.3V. WS2815 spec is 3.7-5.3V. 3.3V works in practice but is 
 
 ---
 
-## 5. Power Budget
+## 5. Power and Data Budget (estimates)
 
-| Condition    | Per pixel | Total (666px) | At 12V |
-|--------------|-----------|---------------|--------|
-| Full white   | 15mA      | 9.99A         | 120W   |
-| 30% avg load (estimate) | ~4.5mA | ~3.00A | ~36W |
-| Breathing animation (measured) | see below | ~3.7A peak 1-min avg | ~44W peak 1-min avg |
+### Power
 
-Fed from both ends, each side carries roughly half.
+Per-pixel figures from Nafas (section 4, Test 7). Animation load fractions are Nafas-measured and only apply if Berlin runs a similar animation.
 
-### Measured Production Animation Load (Test 7)
+| Condition | Per pixel | Total (2,592 px) | At 12V |
+|-----------|-----------|------------------|--------|
+| Full white | 15mA | 38.9A | 467W |
+| Nafas breathing animation, peak single frame (64%) | ~9.6mA | ~24.9A | ~299W |
+| Nafas breathing animation, peak 1-min avg (35%) | ~5.3mA | ~13.6A | ~163W |
 
-Brightness output measured on production `andetag-nafas` breathing animation:
+Implications:
+- Nafas (660 px, 22AWG, fed from both ends) dropped to 10.16V at its midpoint frame at 50% white and 8.53V at 100% white. Berlin draws roughly 4x the current. 22AWG data/power cabling cannot carry the full bus; plan a 12V distribution (heavier feeders, multiple injection points, likely multiple PSUs) so every frame input stays above 9.5V at expected load.
+- PSU sizing: at least ~300W continuous for the Nafas-like animation peak, ~470W plus margin if full white must be possible.
+- Brightness cap in firmware is the cheapest mitigation if full white is never needed.
 
-| Metric | Measured | Notes |
-|--------|----------|-------|
-| Max single-frame output | **64%** | Peak instantaneous load within one animation frame |
-| Highest 1-minute average | **35%** | Peak sustained average, first 15 min of run |
+### Data Rate
 
-The prior 30% average estimate was conservative; real sustained load peaks around **35%**. Single-frame peaks to **64%** — well below full white, and far below levels that caused voltage issues in Test 3 (100% white → 8.53V at F4).
+WS2815 at 800kHz: 30 µs per pixel on the wire. Nafas measured ~43.6 µs per pixel including ESP32 RMT overhead (Test 5: ~30.4 ms per `show()` with 698 pixels configured).
 
-### Voltage at Worst-Case Frame (ANDRUM4, position 4)
+| Data outputs (equal split) | Pixels per output | `show()` time (Nafas-measured rate) | Max FPS |
+|----------------------------|-------------------|--------------------------------------|---------|
+| 1 | 2,592 | ~113 ms | ~9 |
+| 4 | 648 | ~28 ms | ~35 |
+| 8 | 324 | ~14 ms | ~70 |
 
-ANDRUM4 is the largest frame (144px) and sits 9m from Feed A. It's the heaviest load at the longest path.
-
-| Condition    | Estimated voltage at ANDRUM4 | Status       |
-|--------------|------------------------------|--------------|
-| 30% avg load (estimate) | ~10.6V                  | Fine         |
-| Breathing animation (measured ~35% 1-min avg) | ~11.0V at F4 (Test 7, 5 min) | Fine |
-| Full white   | 8.53V measured at F4         | Below 9.5V   |
-
-Full white does not occur in the breathing animation (measured max single frame: 64%). At measured operating load, all frames are well within spec.
+A single data line gives ~9 FPS, too slow for smooth animation. The table assumes outputs transmit in parallel; whether FastLED on this controller does so, and how many outputs the SP803E exposes, is **unverified**. If the SP803E has one usable data pin, Berlin needs a different controller or multiple controllers.
 
 ---
 
 ## 6. Testing Procedures
 
+### Berlin Tests
+
+Status: **not started.** Re-run Tests 1-7 below on the Berlin build once topology and power distribution are defined. Test 2 and Test 7 must cover every injection segment, not just one midpoint frame.
+
+Test firmware: `hardware-test/hardware-test.ino`. Set `NUM_LEDS` to the pixel count of the data path under test.
+
+### Reference: Nafas Validation Results
+
+Nafas configuration for context: 8 frames in order ANDRUM9, 8, 11, 4, 2, 11, 8, 9, single data line from GPIO16, one 20m 22AWG loop fed from both ends, PSU-3m-F1-2m-...-F8-3m-PSU. Production firmware `NUM_LEDS` = 660 (9: 48, 8: 105, 11: 90, 4: 138, 2: 36). The original Nafas guide listed ANDRUM4 as 144 px and a 666 px total; production firmware and the frame spreadsheet both say 138, so pixel counts quoted below as 666 were actually 660.
+
 Status: **All tests complete (1–7 PASS).** System validated for installation.
 
-### Test 1: Baseline PSU Voltage — PASS
+#### Test 1: Baseline PSU Voltage — PASS
 
 Measure DC voltage at PSU output terminals with no load, then with all frames connected (pixels dark). Expected: 12.0-12.5V.
 
@@ -156,7 +173,7 @@ Measure DC voltage at PSU output terminals with no load, then with all frames co
 | PSU output (no load) | 12.5V | 12.0-12.5V | PASS |
 | PSU output (frames connected, no extension cables, pixels dark) | 12.12V | 12.0-12.5V | PASS |
 
-### Test 2: Voltage Distribution Under Load — PASS
+#### Test 2: Voltage Distribution Under Load — PASS
 
 Set all pixels to solid color at 50% brightness. Measure 12V (VCC to GND) at each frame's input connector, frames 1-8. Record all 8 readings plus PSU output. All frames should be above 9.5V. Center frames will be lowest.
 
@@ -176,7 +193,7 @@ Load: 50% white (`CRGB(128,128,128)`), full 666-pixel chain with extension cable
 
 Notes: Symmetric F1/F8 readings (11.33V) confirm dual-end power feed is working. F4 is the voltage floor at 10.16V — 0.66V above the 9.5V regulation threshold.
 
-### Test 3: Voltage Under Stress — COMPLETE
+#### Test 3: Voltage Under Stress — COMPLETE
 
 Set all pixels to full white 100%. Measure voltage at ANDRUM4 (frame 4). Establishes the actual voltage floor. Expected to dip below 9.5V; acceptable since this state is momentary.
 
@@ -189,13 +206,13 @@ Load: full white (`CRGB::White`), full 666-pixel chain with extension cables.
 
 Visual: white appeared uniform across all frames despite F4 voltage drop. Confirms full-white state is momentary-only in production animation; not a sustained operating condition.
 
-### Test 4: Data Integrity (Visual) — PASS
+#### Test 4: Data Integrity (Visual) — PASS
 
 Run a single-pixel chase at maximum speed through all 666 pixels. Observe each frame boundary for stuck pixels, color errors, flickering, or skipped pixels.
 
 Result: clean chase through all 666 pixels. No stuck, skipped, or miscolored pixels at frame boundaries. Motion smooth and continuous.
 
-### Test 5: Data Integrity (Quantitative) — PASS
+#### Test 5: Data Integrity (Quantitative) — PASS
 
 Measure `FastLED.show()` duration. Expected: ~20ms for 666 WS2815 pixels at 800kHz (~50 FPS). If significantly longer, investigate firmware conflicts (WiFi, interrupts).
 
@@ -211,7 +228,7 @@ Redo method: moving-pixel chase over 666 frames. Reports single-frame `show()` �
 
 Note: ~30 ms/frame is ~50% above theoretical on-wire time (~20 ms), likely ESP32 RMT driver overhead on this controller. Timing is stable with no jitter between laps. Effective max refresh ~33 FPS — adequate for breathing animation. Investigate further only if flickering correlates with frame rate (Test 6). Measured timings above were taken under the prior 698-pixel firmware count; re-check if show() budget becomes tight.
 
-### Test 6: Flickering Isolation — PASS
+#### Test 6: Flickering Isolation — PASS
 
 Progressive isolation to determine if flickering is electrical, firmware, or controller-related.
 
@@ -244,7 +261,7 @@ Findings:
 4. ~~F4→F6 bypass; F5 at position 2.~~ Isolated to F4–F5–F6 cabling.
 5. ~~BO cable cut/isolation fix.~~ Resolved.
 
-### Test 7: Long-Duration Stability — PASS
+#### Test 7: Long-Duration Stability — PASS
 
 Run production breathing animation for 2+ hours. Measure 12V at ANDRUM4 (frame input connector; middle of frame is acceptable probe point) every 30 min. Monitor for visual degradation or color shift.
 
@@ -262,14 +279,15 @@ Result: 20-hour continuous run. F4 voltage unchanged from 30-min reading. No vis
 
 ## 7. Wiring Checklist
 
-- [ ] PSU output confirmed ~12V
-- [ ] Barrel jack connected to SP803E
-- [ ] 12V bus connected at both ends of frame loop
-- [ ] GPIO16 connected to frame 1 (ANDRUM9) DI+BI
+- [ ] PSU output(s) confirmed ~12V
+- [ ] Barrel jack connected to controller
+- [ ] 12V injected at every planned injection point (TBD)
+- [ ] Each data output connected to the first frame of its chain at DI+BI
 - [ ] Each inter-frame: DO only to DI+BI (not DO+BO)
 - [ ] BO cut and isolated on all inter-frame cables (cannot contact other conductors)
-- [ ] GND common between PSU, controller, and all frames
+- [ ] GND common between all PSUs, controller, and all frames
 - [ ] USB-C→USB-A→USB-C path available for uploads (straight USB-C will not work)
+- [ ] Firmware `NUM_LEDS` per output matches the pixels physically on that data path
 
 ---
 
@@ -282,12 +300,12 @@ Result: 20-hour continuous run. F4 voltage unchanged from 30-min reading. No vis
 | Sketch too large (default partition) | 1.25MB app limit | Use Huge APP (3MB No OTA) partition |
 | Signal corruption at frame boundaries | DO+BO paired together | Only connect DO to DI+BI |
 | F6–F8 flicker, F1–F5 clean (canonical order) | Uncut BO conductor touching adjacent pin at cable angle | Fully cut and isolate BO on all inter-frame cables |
-| Color degradation at ANDRUM4 under extreme load | Voltage drop at loop midpoint | Firmware brightness cap or thicker 3m lead cables |
+| Color degradation under heavy load (Nafas: ANDRUM4 at loop midpoint) | Voltage drop along 22AWG bus | Firmware brightness cap, more injection points, heavier feeders |
+| Flicker when firmware `NUM_LEDS` differs from pixels on the data path | Phantom pixels change `show()` timing (Nafas Test 6, step 2b) | Match `NUM_LEDS` to actual chain |
 
 ---
 
 ## 9. Installation Environment
 
-- Location: Mleiha, Sharjah, UAE (festival Nov 20-22), then permanent at Shurooq HQ (indoors)
-- UAE power: Type G plug, 230V/50Hz. PSU must be rated 100-240V input.
-- November ambient temp: ~30-33C. Indoor permanent placement is climate-controlled.
+- Location: Berlin, Germany. Venue, dates, indoor/outdoor: **TBD**.
+- German power: Type F (Schuko) plug, 230V/50Hz. PSU must accept 230V input.
