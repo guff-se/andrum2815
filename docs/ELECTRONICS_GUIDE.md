@@ -34,11 +34,35 @@ Pixel data source: "Andrum" tab of the frame spreadsheet (`NUM_LEDS`, `NUM_MLEDS
 
 Subtotals: ANDRUM1-4 (one each) = 344 px. One set of ANDRUM5-14 = 562 px; four sets = 2,248 px.
 
-**Pixel counts differ from the Nafas builds** of the same model numbers. Nafas firmware (`config.h`) uses ANDRUM8 = 105, ANDRUM9 = 48, ANDRUM11 = 90; the spreadsheet gives 109, 54, 99. ANDRUM2 (36) and ANDRUM4 (138) match. Confirm against the physical Berlin frames before writing mapping code.
+The spreadsheet is authoritative for pixel counts. Some Nafas frames were built slightly differently (Nafas firmware: ANDRUM8 = 105, ANDRUM9 = 48, ANDRUM11 = 90); do not reuse Nafas mapping values for these models.
 
-### Frame Order and Cable Layout
+### Power Loops (proposed)
 
-**TBD.** Physical order, data-chain grouping, cable lengths and power injection points are not yet defined. Nafas used a single 20m loop with 8 frames on one data line; that topology does not scale to 2,592 pixels (see section 5).
+The 44 frames are split into **5 independent power loops**, each wired like Nafas: one 22AWG 3-conductor run, 12V fed at both ends, frames tapping the bus in parallel, data daisy-chained through the loop. Each loop gets its own data output, so data and power topology are the same.
+
+| Loop | Frames | Order (feed A → feed B) | Pixels | Est. worst drop @50% white | Est. worst frame @100% white |
+|------|--------|--------------------------|--------|----------------------------|------------------------------|
+| A | ANDRUM5-14, set 1 | 8, 13, 9, 12, 14, 5, 7, 10, 6, 11 | 562 | 1.52V (frames 14/5) | ~9.4V |
+| B | ANDRUM5-14, set 2 | same as A | 562 | 1.52V | ~9.4V |
+| C | ANDRUM5-14, set 3 | same as A | 562 | 1.52V | ~9.4V |
+| D | ANDRUM5-14, set 4 | same as A | 562 | 1.52V | ~9.4V |
+| E | ANDRUM1-4 | 4, 2, 3, 1 | 344 | 0.61V | ~11.0V |
+| | **44 frames** | | **2,592** | Nafas measured: 2.04V | Nafas measured: 8.53V |
+
+Why this split:
+- **Stays inside the Nafas-validated envelope.** Nafas (660 px, 8 frames, 20m loop) passed all tests with a worst-case drop of 2.04V at 50% white. Every proposed loop has fewer pixels and a smaller estimated drop, so Tests 2, 3 and 7 should carry over with margin instead of being re-derived.
+- **Order matters.** Heaviest frames (ANDRUM8, ANDRUM11) sit next to the feeds and the lightest (ANDRUM14, ANDRUM5) in the middle, where Nafas showed the voltage floor is. Placing them in numeric order 5..14 raises the worst drop from 1.52V to 2.06V (no margin over Nafas); the worst possible order gives 2.26V.
+- **Four identical loops.** Same frames, same order, same pixel offsets: one mapping table and one test procedure for A-D.
+- **Data rate.** Largest data chain is 562 px, ~24.5 ms per `show()` at the Nafas-measured rate, ~40 FPS (Nafas ran ~33 FPS).
+
+Assumptions (all estimates depend on them):
+- Same cable as Nafas, 3m lead from each feed to the end frames, **2m between frames**. Inter-frame spacing up to ~3m keeps Loops A-D within the Nafas 2.04V drop (3m: 1.88V; 4m: 2.24V). Longer runs need heavier cable or shorter loops.
+- Feeds A and B of a loop are at equal voltage (same PSU, or matched PSUs with common ground).
+- Estimates come from a resistive model of the loop (frames as current sinks proportional to pixel count, cable resistance proportional to length) scaled to the Nafas Test 2 measurements. The model reproduces Nafas Test 2 within 0.26V per frame (r = 0.97). Verify with Berlin Test 2 on the built loops.
+
+Fallback with 4 loops: one ANDRUM5-14 set plus one of ANDRUM1-4 per loop (11 frames, 598-700 px). Estimated worst drop 1.73-1.97V at 2m spacing: inside the Nafas envelope but with almost no margin, and it fails at 3m spacing. Use only if a fifth PSU or data output is not available.
+
+Physical placement of loops in the room and exact cable lengths: **TBD**.
 
 ---
 
@@ -87,7 +111,7 @@ void setup() {
 
 12V PSU feeds two paths:
 1. Barrel jack on SP803E (milliamps, powers ESP32 only)
-2. Directly to the pixel bus VCC/GND (injection points TBD; Nafas fed both ends of one loop)
+2. Directly to each power loop VCC/GND at both ends (5 loops, section 1)
 
 ### Data Between Frames
 
@@ -132,9 +156,9 @@ Per-pixel figures from Nafas (section 4, Test 7). Animation load fractions are N
 | Nafas breathing animation, peak 1-min avg (35%) | ~5.3mA | ~13.6A | ~163W |
 
 Implications:
-- Nafas (660 px, 22AWG, fed from both ends) dropped to 10.16V at its midpoint frame at 50% white and 8.53V at 100% white. Berlin draws roughly 4x the current. 22AWG data/power cabling cannot carry the full bus; plan a 12V distribution (heavier feeders, multiple injection points, likely multiple PSUs) so every frame input stays above 9.5V at expected load.
-- PSU sizing: at least ~300W continuous for the Nafas-like animation peak, ~470W plus margin if full white must be possible.
-- Brightness cap in firmware is the cheapest mitigation if full white is never needed.
+- Nafas (660 px, 22AWG, fed from both ends) dropped to 10.16V at its midpoint frame at 50% white and 8.53V at 100% white. Berlin draws roughly 4x the current, so it is split into 5 loops (section 1).
+- Per loop: Loops A-D (562 px) draw 8.4A / 101W at full white, ~5.4A at the Nafas animation peak. Loop E (344 px) draws 5.2A / 62W at full white.
+- Full white still puts the middle frames of Loops A-D at ~9.4V, just under the 9.5V regulation threshold (better than Nafas at 8.53V). A firmware brightness cap removes this if full white is not needed.
 
 ### Data Rate
 
@@ -144,6 +168,7 @@ WS2815 at 800kHz: 30 µs per pixel on the wire. Nafas measured ~43.6 µs per pix
 |----------------------------|-------------------|--------------------------------------|---------|
 | 1 | 2,592 | ~113 ms | ~9 |
 | 4 | 648 | ~28 ms | ~35 |
+| 5 (proposed loops, max 562) | 562 | ~24.5 ms | ~40 |
 | 8 | 324 | ~14 ms | ~70 |
 
 A single data line gives ~9 FPS, too slow for smooth animation. The table assumes outputs transmit in parallel; whether FastLED on this controller does so, and how many outputs the SP803E exposes, is **unverified**. If the SP803E has one usable data pin, Berlin needs a different controller or multiple controllers.
@@ -154,7 +179,7 @@ A single data line gives ~9 FPS, too slow for smooth animation. The table assume
 
 ### Berlin Tests
 
-Status: **not started.** Re-run Tests 1-7 below on the Berlin build once topology and power distribution are defined. Test 2 and Test 7 must cover every injection segment, not just one midpoint frame.
+Status: **not started.** Re-run Tests 1-7 below on each loop. Test 2 checks the model: expected lowest frames in Loops A-D are ANDRUM14 and ANDRUM5 (positions 5-6) at ~1.5V below feed voltage under 50% white. A reading near or above 2V means spacing or cabling differs from the assumptions in section 1.
 
 Test firmware: `hardware-test/hardware-test.ino`. Set `NUM_LEDS` to the pixel count of the data path under test.
 
@@ -281,8 +306,9 @@ Result: 20-hour continuous run. F4 voltage unchanged from 30-min reading. No vis
 
 - [ ] PSU output(s) confirmed ~12V
 - [ ] Barrel jack connected to controller
-- [ ] 12V injected at every planned injection point (TBD)
-- [ ] Each data output connected to the first frame of its chain at DI+BI
+- [ ] Each of the 5 loops fed 12V at both ends
+- [ ] Each loop's data output connected to its first frame (feed A end) at DI+BI
+- [ ] Frame order in Loops A-D: 8, 13, 9, 12, 14, 5, 7, 10, 6, 11; Loop E: 4, 2, 3, 1
 - [ ] Each inter-frame: DO only to DI+BI (not DO+BO)
 - [ ] BO cut and isolated on all inter-frame cables (cannot contact other conductors)
 - [ ] GND common between all PSUs, controller, and all frames
